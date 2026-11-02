@@ -1,0 +1,159 @@
+<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><title>Sverige Adventure 1.9</title><style>*{box-sizing:border-box}html,body{margin:0;background:#101b36;color:white;font-family:system-ui;overflow:hidden;touch-action:none;overscroll-behavior:none}#game{width:100vw;height:100dvh;display:block;image-rendering:pixelated}#hud{position:fixed;top:env(safe-area-inset-top);left:12px;font-weight:900;text-shadow:2px 2px #111;font-size:15px;pointer-events:none}#controls{position:fixed;inset:0;pointer-events:none}.btn{pointer-events:auto;position:absolute;bottom:calc(16px + env(safe-area-inset-bottom));width:82px;height:82px;border:2px solid #ffffff88;border-radius:20px;background:#ffffff30;color:#fff;font-size:26px;font-weight:900;touch-action:none;user-select:none}.btn:active,.btn.pressed{background:#ffffff99;transform:scale(.96)}#left{left:12px}#right{left:104px}#jump{right:12px;background:#35a5df88}#shoot{right:104px;background:#ff667988}#start{position:fixed;inset:0;background:#102044e8;display:grid;place-content:center;text-align:center;padding:20px;z-index:3}#start h1{font-size:clamp(27px,8vw,48px);color:#ffe271;text-shadow:4px 4px #bd5a39;margin:0 0 12px}#start p{max-width:440px;line-height:1.45}#play{background:#ffcc4e;color:#222;border:0;border-radius:14px;font-size:22px;font-weight:900;padding:15px 32px}#note{font-size:13px;opacity:.85}#sound{position:fixed;right:10px;top:calc(8px + env(safe-area-inset-top));background:#172c59b0;color:white;border:1px solid #ffffff66;border-radius:9px;padding:7px;z-index:2}@media(min-width:800px){.btn{width:76px;height:76px}} </style></head><body><canvas id="game" width="400" height="225"></canvas><div id="hud"></div><button id="sound">🔊</button><div id="controls"><button class="btn" id="left">◀</button><button class="btn" id="right">▶</button><button class="btn" id="shoot">✦</button><button class="btn" id="jump">▲</button></div><div id="start"><h1>🇸🇪 SVERIGE ADVENTURE</h1><p>Spring, hoppa, samla mynt och skjut laser! Leta efter det hemliga röret efter banans mitt. Simma och samla 50 undervattensmynt.</p><p id="note">Version 1.9 · Laddar spelmotorn…</p><div><button id="play">STARTA SPELET ▶</button></div></div><script>
+(()=>{'use strict';document.getElementById('note').textContent='Spelmotorn redo ✓ · Tryck STARTA';const c=document.querySelector('#game'),ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;const hud=document.querySelector('#hud');let audio=null,muted=false;const keys={left:false,right:false,jump:false,shoot:false};const W=400,H=225,ground=184,world=3400;let hero,coins,enemies,bullets,particles,undercoins,under=false,cam=0,score=0,frame=0,won=false,previousJump=false,shootDelay=0,started=false;function beep(f=440,d=.09,type='square',vol=.05){if(muted||!audio)return;try{let o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(f,audio.currentTime);g.gain.setValueAtTime(vol,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+d);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+d)}catch(e){}}function reset(){hero={x:36,y:135,vx:0,vy:0,w:15,h:23,face:1,grounded:false,air:100};score=0;frame=0;cam=0;under=false;won=false;bullets=[];particles=[];coins=[];undercoins=[];enemies=[];for(let x=105;x<world-90;x+=77)coins.push({x,y:115+Math.sin(x*.021)*19,taken:false});for(let x=330;x<world-200;x+=260)enemies.push({x,y:ground-15,alive:true,dir:1});for(let i=0;i<50;i++)undercoins.push({x:72+(i%10)*32,y:32+Math.floor(i/10)*29,taken:false});}function box(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.round(x),Math.round(y),w,h)}function circle(x,y,r,col){ctx.fillStyle=col;ctx.beginPath();ctx.arc(Math.round(x),Math.round(y),r,0,Math.PI*2);ctx.fill()}function text(s,x,y,color='#fff',size=11){ctx.fillStyle=color;ctx.font=`bold ${size}px monospace`;ctx.fillText(s,Math.round(x),Math.round(y))}function hit(a,b){return a.x<b.x+(b.w||12)&&a.x+a.w>b.x&&a.y<b.y+(b.h||12)&&a.y+a.h>b.y}function pipe(){return {x:2050,y:ground-34,w:32,h:34}}function update(){if(!started||won)return;frame++;const jumpNow=keys.jump;if(under){hero.vx=(keys.right?2:0)-(keys.left?2:0);hero.x=Math.max(6,Math.min(379,hero.x+hero.vx));hero.vy+=(keys.jump?-.24:.12);hero.vy*=.95;hero.vy=Math.max(-2.6,Math.min(2.5,hero.vy));hero.y=Math.max(5,Math.min(196,hero.y+hero.vy));hero.air=Math.max(0,hero.air-.035);if(hero.air===0){leaveWater()}for(let coin of undercoins)if(!coin.taken&&Math.hypot(hero.x-coin.x,hero.y-coin.y)<17){coin.taken=true;score++;beep(780,.07)}if(hero.x>350&&hero.y<49&&keys.jump)leaveWater();if(frame%13===0)particles.push({x:hero.x+7,y:hero.y-3,life:42,water:true});}else{const target=(keys.right?2.8:0)-(keys.left?2.8:0);hero.vx+=(target-hero.vx)*(target===0?.42:.55);if(Math.abs(hero.vx)<.08)hero.vx=0;if(hero.vx)hero.face=Math.sign(hero.vx);hero.x=Math.max(0,Math.min(world-20,hero.x+hero.vx));if(jumpNow&&!previousJump&&hero.grounded){hero.vy=-7.8;hero.grounded=false;beep(520,.12)}hero.vy+=.39;hero.y+=hero.vy;if(hero.y+hero.h>=ground){hero.y=ground-hero.h;hero.vy=0;hero.grounded=true}for(let coin of coins)if(!coin.taken&&Math.hypot(hero.x-coin.x,hero.y-coin.y)<18){coin.taken=true;score++;beep(800,.07)}if(keys.shoot&&shootDelay<=0){bullets.push({x:hero.x+(hero.face>0?16:-5),y:hero.y+10,vx:hero.face*6});shootDelay=15;beep(220,.08,'sawtooth',.035)}shootDelay--;for(let b of bullets)b.x+=b.vx;bullets=bullets.filter(b=>b.x>hero.x-300&&b.x<hero.x+500);for(let e of enemies){if(!e.alive)continue;e.x+=Math.sin(frame*.025+e.x)*.16;for(let b of bullets)if(hit({x:b.x,y:b.y,w:8,h:4},{x:e.x,y:e.y,w:15,h:15})){e.alive=false;b.x=-1000;beep(140,.2)}if(hit(hero,{x:e.x,y:e.y,w:15,h:15})){hero.x=Math.max(0,hero.x-75);hero.vy=-4;beep(100,.25)}}const p=pipe();if(hero.x>p.x-10&&hero.x<p.x+35&&hero.y+hero.h>=p.y&&keys.jump&&keys.right){enterWater()}if(hero.x>world-90){won=true;beep(920,.4)}}cam=Math.max(0,Math.min(world-W,hero.x-110));particles=particles.filter(p=>p.life-->0);for(let p of particles)p.y-=.75;previousJump=jumpNow;}function enterWater(){under=true;hero.x=22;hero.y=85;hero.vy=0;hero.air=100;beep(330,.3,'sine')}function leaveWater(){under=false;hero.x=2095;hero.y=ground-hero.h-4;hero.vy=-3;beep(600,.3,'sine')}function drawHero(x,y){
+ const moving=Math.abs(hero.vx)>.35;
+ const airborne=!under&&!hero.grounded;
+ const phase=frame*.32;
+ const stride=moving&&!airborne?Math.sin(phase)*4:0;
+ const armSwing=moving&&!airborne?Math.sin(phase)*3:0;
+ const facing=hero.face<0?-1:1;
+ ctx.save();
+ ctx.translate(Math.round(x)+(facing<0?15:0),Math.round(y));
+ ctx.scale(facing,1);
+ // Separate leg and arm poses create a readable 16-bit running cycle.
+ if(airborne){
+   box(3,18,5,5,'#253c73');box(10,20,5,4,'#253c73');
+   box(1,11,4,7,'#f7c6a1');box(14,10,4,6,'#f7c6a1');
+ }else{
+   const left=Math.round(stride),right=-left;
+   box(4+left,18,4,5,'#253c73');box(4+left,22,6,2,'#172a46');
+   box(10+right,18,4,5,'#253c73');box(10+right,22,6,2,'#172a46');
+   box(1,10+Math.round(armSwing),4,8,'#f7c6a1');
+   box(14,10-Math.round(armSwing),3,8,'#f7c6a1');
+ }
+ box(4,8,10,12,'#d9414c');box(5,9,2,9,'#ed6267');
+ box(2,1,12,10,'#f7c6a1');box(2,0,13,4,'#244d8b');
+ box(11,4,3,2,'#172438');box(13,7,2,2,'#ae705d');
+ if(under){
+   box(-4,9,6,13,'#a5b9c6');box(-2,1,21,15,'#a9eaff55');
+   ctx.strokeStyle='#c8f7ff';ctx.lineWidth=2;ctx.strokeRect(-2,0,20,16);
+   const kick=Math.round(Math.sin(frame*.22)*3);
+   box(2,22+kick,8,4,'#f5c34a');box(11,22-kick,8,4,'#f5c34a');
+ }
+ ctx.restore();
+}function draw(){if(under){box(0,0,W,H,'#07547b');for(let i=0;i<12;i++){let x=i*42+Math.sin(frame*.015+i)*6;box(x,0,13,H,'#0a648655')}for(let i=0;i<16;i++)circle((i*57+frame*.17)%W,(i*37+frame*.4)%H,1.5,'#74d8ef55');box(0,210,W,15,'#b7a26d');for(let i=0;i<12;i++){let x=i*36+7;box(x,199,3,11,'#1bba8b')}for(let coin of undercoins)if(!coin.taken){circle(coin.x+5,coin.y+5,5,'#ffcc35');circle(coin.x+5,coin.y+5,2,'#fff0a0')}for(let p of particles)if(p.water){ctx.strokeStyle='#b7f5ff';ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.stroke()}drawHero(hero.x,hero.y);text('DYKVÄRLD  '+undercoins.filter(q=>q.taken).length+'/50',8,15);text('LUFT '+Math.ceil(hero.air)+'%',290,15);text('UTGÅNG ↑',324,35,'#ffe27d',9);box(361,0,36,7,'#ffe27d')}else{// Version 1.5: layered 16-bit-inspired Swedish scenery, drawn on the same canvas.
+// Version 1.6: richly layered Swedish landscape; control code below is unchanged.
+box(0,0,W,H,'#78c7e9');box(0,69,W,115,'#9edce1');
+// Pixel-art sky gradients and distant sunlight.
+for(let i=0;i<7;i++)box(0,55+i*12,W,12,['#85cde9','#8cd2e7','#94d6e5','#9bdae4','#a5dedf','#a8ded9','#a8dfd5'][i]);
+let sx=325-cam*.014;circle(sx,35,26,'#ffefad44');circle(sx,35,18,'#fff0ac');circle(sx-5,30,9,'#fff8d5');
+// Wispy drifting clouds, shadows and highlights.
+for(let i=0;i<8;i++){let x=((i*123-cam*.10+frame*.035)%690+690)%690-95,y=14+(i*19%44);box(x+4,y+9,61,9,'#a9d7e1');box(x,y+7,55,10,'#e3f5f7');box(x+10,y+2,35,14,'#f7ffff');box(x+21,y-3,20,12,'#fff');box(x+47,y+8,19,6,'#f8ffff');}
+// Distant jagged mountain ranges with craggy faces and snow caps.
+for(let i=-1;i<9;i++){let x=i*132-(cam*.11%132),peak=51+(i*17+120)%27;ctx.fillStyle='#6c9fb5';ctx.beginPath();ctx.moveTo(x-69,172);ctx.lineTo(x+40,peak);ctx.lineTo(x+72,peak+33);ctx.lineTo(x+99,peak+18);ctx.lineTo(x+167,172);ctx.fill();ctx.fillStyle='#8fb9c3';ctx.beginPath();ctx.moveTo(x+40,peak);ctx.lineTo(x+72,peak+33);ctx.lineTo(x+65,171);ctx.lineTo(x+15,171);ctx.fill();ctx.fillStyle='#f1f7ed';ctx.beginPath();ctx.moveTo(x+40,peak);ctx.lineTo(x+15,peak+34);ctx.lineTo(x+31,peak+26);ctx.lineTo(x+39,peak+36);ctx.lineTo(x+49,peak+25);ctx.lineTo(x+62,peak+35);ctx.fill();box(x+7,140,20,2,'#b8d1d2');}
+// Rolling foothills, with shadowed slopes and patches of alpine forest.
+for(let i=-1;i<9;i++){let x=i*112-(cam*.25%112),h=119+(i*11+120)%24;ctx.fillStyle=i%2?'#478f8c':'#569d94';ctx.beginPath();ctx.moveTo(x-76,185);ctx.lineTo(x+32,h);ctx.lineTo(x+136,185);ctx.fill();ctx.fillStyle='#377f7d';ctx.beginPath();ctx.moveTo(x+32,h);ctx.lineTo(x+136,185);ctx.lineTo(x+61,185);ctx.fill();for(let j=0;j<5;j++){let tx=x+j*20-21,ty=163+(j*7%13);box(tx,ty-11,2,13,'#345e5c');ctx.fillStyle='#2b7973';ctx.beginPath();ctx.moveTo(tx-5,ty-3);ctx.lineTo(tx+1,ty-17);ctx.lineTo(tx+7,ty-3);ctx.fill();}}
+// A few small red Swedish cottages in the middle distance.
+for(let i=0;i<11;i++){let x=240+i*330-cam*.38;if(x<-50||x>W+50)continue;let y=157;box(x,y,27,20,'#a83d3a');box(x+2,y+2,23,16,'#c04b43');ctx.fillStyle='#654947';ctx.beginPath();ctx.moveTo(x-4,y+1);ctx.lineTo(x+13,y-11);ctx.lineTo(x+31,y+1);ctx.fill();box(x+5,y+7,6,6,'#f6e5b2');box(x+17,y+8,5,12,'#673f36');box(x+4,y+4,20,1,'#e16b56');}
+// Lakes, rocky cliffs and sparkling animated waterfalls.
+for(let i=0;i<9;i++){let wx=470+i*440-cam;if(wx<-110||wx>W+110)continue;box(wx-37,157,104,27,'#307d8b');box(wx-30,159,89,3,'#73c7c8');box(wx-22,172,70,2,'#8dd9d6');box(wx-25,180,88,2,'#b1ece0');box(wx+5,146,53,9,'#627d76');box(wx+11,142,44,5,'#82968b');box(wx+15,149,26,34,'#3c9ebd');box(wx+19,149,19,34,'#62c5e3');for(let j=0;j<5;j++){let yy=151+((frame*1.1+j*11)%28);box(wx+19+j*4,yy,2,6,'#d5fbff');}box(wx+10,181,40,2,'#d5f9f2');}
+// Near spruce forest: distinct trunks, branch layers, and lit tips.
+for(let i=-2;i<15;i++){let x=i*36-(cam*.53%36);if(x<-50||x>W+25)continue;ctx.drawImage(spruceSprites[((i%12)+12)%12],Math.round(x-15),ground-66);}
+
+// Version 1.7: layered woodland details and peaceful wildlife (decorative only).
+// Distant birches with bark marks, golden foliage and a second tree line.
+for(let i=0;i<22;i++){let x=i*78+31-cam*.42;if(x<-38||x>W+38)continue;let y=166+(i%3)*4;ctx.drawImage(birchSprites[i%12],Math.round(x-28),Math.round(y-63));}
+
+// Little rocky outcrops and reeds around the lake shores.
+for(let i=0;i<9;i++){let x=470+i*440-cam;if(x<-110||x>W+110)continue;for(let j=0;j<5;j++){let rx=x-47+j*27,ry=ground-4;box(rx,ry-4,14,5,'#5e7771');box(rx+3,ry-7,9,3,'#a4b4a3');box(rx+16,ry-9,2,9,'#467f51');box(rx+20,ry-13,2,13,'#5d9757');}for(let j=0;j<4;j++){let xx=x-24+j*22+((frame*.15+j*7)%11);box(xx,166+j%2*8,9,1,'#c1f4e6');}}
+// Rustic wooden fences, mushrooms and berry bushes beside the path.
+for(let i=0;i<8;i++){let x=160+i*455-cam;if(x<-95||x>W+25)continue;for(let j=0;j<5;j++){box(x+j*15,ground-19,3,18,'#76583e');box(x+j*15+1,ground-20,1,3,'#c99d68');}box(x,ground-14,64,3,'#aa8052');box(x,ground-7,64,3,'#9b724a');}
+for(let i=0;i<80;i++){let x=55+i*47-cam;if(x<-20||x>W+20)continue;if(i%3===0){box(x,ground-7,2,7,'#e8d8b3');box(x-4,ground-10,10,4,'#b94f42');box(x-2,ground-11,2,2,'#fff0c6');box(x+3,ground-10,2,2,'#fff0c6');}else if(i%3===1){circle(x,ground-8,6,'#367d4a');circle(x+5,ground-7,5,'#418b4e');box(x-2,ground-10,2,2,'#e54c54');box(x+5,ground-7,2,2,'#df404e');}}
+// Small animated birds and dragonflies, deliberately lightweight on mobile.
+for(let i=0;i<7;i++){let x=((i*157-cam*.19+frame*(.17+i*.025))%610+610)%610-60,y=29+(i*19%56)+Math.sin(frame*.04+i)*3;box(x,y,4,2,'#354f62');box(x-4,y-2-Math.round(Math.sin(frame*.17+i)*2),5,2,'#425b6b');box(x+3,y-2-Math.round(Math.sin(frame*.17+i)*2),5,2,'#425b6b');}
+// Moose: large antlers, long legs and characteristic long muzzle.
+function drawMoose(x,y,scale=1){ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.scale(scale,scale);box(7,12,32,16,'#805237');box(12,13,22,5,'#a8744b');box(33,7,10,14,'#855538');box(39,13,13,7,'#94623f');box(48,16,6,4,'#4b342e');box(11,27,5,21,'#5b3c31');box(30,27,5,21,'#62402e');box(36,25,4,22,'#62402e');box(14,46,7,3,'#302c2a');box(29,46,7,3,'#302c2a');box(35,46,7,3,'#302c2a');box(39,10,2,2,'#1b2221');box(39,3,3,8,'#b79b6b');box(35,-5,3,11,'#c7ad7b');box(44,-6,3,13,'#c7ad7b');box(30,-8,6,4,'#bda170');box(45,-9,6,4,'#bda170');box(34,-12,4,7,'#d1b789');box(48,-13,4,7,'#d1b789');ctx.restore();}
+// Bear: rounded body, ears, snout and paws. Wildlife is scenic, not an enemy.
+function drawBear(x,y,scale=1){ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.scale(scale,scale);box(5,13,31,20,'#664735');box(9,11,22,5,'#805940');box(30,8,17,18,'#76503a');circle(34,8,4,'#68442f');circle(43,8,4,'#68442f');box(41,17,13,8,'#a57a55');box(50,19,4,3,'#2c2827');box(41,13,2,2,'#151b1a');box(9,30,8,9,'#503b30');box(29,30,8,9,'#503b30');box(37,28,7,11,'#503b30');box(9,37,10,2,'#2d2a27');box(29,37,10,2,'#2d2a27');ctx.restore();}
+// Fixed world coordinates make animals appear naturally as you explore.
+for(const a of [{x:700,t:'moose',s:.84},{x:1510,t:'bear',s:.85},{x:2570,t:'moose',s:.92},{x:3080,t:'bear',s:.8}]){let x=a.x-cam;if(x<-85||x>W+40)continue;let bob=Math.sin(frame*.018+a.x)*.6;if(a.t==='moose')drawMoose(x,ground-48+bob,a.s);else drawBear(x,ground-33+bob,a.s);}
+// Foreground soil: layered earth, grass lip, embedded stones and roots.
+box(0,ground,W,H-ground,'#956345');box(0,ground,W,3,'#83cb5e');box(0,ground+3,W,4,'#4a9d4c');box(0,ground+7,W,4,'#79583f');
+for(let x=-(cam%24);x<W;x+=24){box(x+2,194,11,2,'#b98358');box(x+15,207,7,2,'#694a38');box(x+5,216,5,2,'#b27b53');box(x+18,200,2,5,'#6f4d3b');}
+// Individually placed shrubs, flower heads, moss and glinting rocks.
+for(let i=0;i<170;i++){let x=i*31-cam;if(x<-20||x>W+20)continue;let seed=(i*37)%17;box(x,ground-4,2,4,'#368b49');box(x+3,ground-6,2,6,'#53a954');box(x+6,ground-3,2,3,'#2e7d42');if(i%4===0){box(x+10,ground-10,2,8,'#377b44');box(x+8,ground-13,6,5,i%2?'#ffe18b':'#f2a4d1');box(x+10,ground-12,2,2,'#fff5c9');}if(i%7===0){box(x+14,ground-6,13,6,'#626f70');box(x+16,ground-8,9,3,'#9aa9a5');box(x+19,ground-8,3,2,'#c4d0c4');}if(seed===3){box(x+8,ground-9,13,6,'#3b8750');box(x+10,ground-12,8,6,'#55a765');}}
+for(let coin of coins)if(!coin.taken&&coin.x-cam>-12&&coin.x-cam<W+12){circle(coin.x-cam,coin.y,6,'#ffbf29');box(coin.x-cam-1,coin.y-4,3,8,'#fff19a')}for(let e of enemies)if(e.alive){let x=e.x-cam;if(x>-20&&x<W){box(x,e.y,15,15,'#b34b70');box(x+3,e.y+4,3,3,'#fff');box(x+10,e.y+4,3,3,'#fff')}}let p=pipe(),px=p.x-cam;if(px>-40&&px<W){box(px+3,p.y,26,34,'#238e53');box(px,p.y,32,9,'#3de27c');box(px+7,p.y+12,4,19,'#5af293');text('↓ BONUS',px-12,p.y-8,'#153c5a',9)}for(let b of bullets)box(b.x-cam,b.y,9,3,'#fffa8b');drawHero(hero.x-cam,hero.y);if(hero.x>world-280){text('MÅL →',world-130-cam,140,'#173d5e',14);box(world-45-cam,ground-70,3,70,'#fff');box(world-42-cam,ground-70,26,18,'#f1d453')}}box(0,218,W,7,'#172a46');hud.textContent='🪙 '+score+'   '+(under?'🌊 HEMLIG VÄRLD':'🇸🇪 SVERIGE');if(won){box(50,60,300,95,'#17365d');text('BANAN KLAR!',92,100,'#ffe67c',24);text('MYNT: '+score,145,124,'#fff',14);text('Tryck på skärmen för omstart',73,145,'#fff',10)}}let lastTick=0,accumulator=0;
+function loop(timestamp){
+ if(!lastTick)lastTick=timestamp;
+ accumulator+=Math.min(100,timestamp-lastTick);
+ lastTick=timestamp;
+ let steps=0;
+ while(accumulator>=1000/60&&steps<5){update();accumulator-=1000/60;steps++;}
+ if(steps===5)accumulator=0;
+ draw();
+ requestAnimationFrame(loop);
+}// iPhone-safe controls: track each active touch globally, never latch a direction.
+const held={left:new Set(),right:new Set(),jump:new Set(),shoot:new Set()};
+const controls=['left','right','jump','shoot'];
+const activeTouches=new Map();
+function syncControls(){
+ for(const k of controls){
+  keys[k]=held[k].size>0;
+  document.getElementById(k).classList.toggle('pressed',keys[k]);
+ }
+}
+function releaseTouch(id){
+ for(const k of controls)held[k].delete(id);
+ activeTouches.delete(id);syncControls();
+}
+function clearControls(){
+ activeTouches.clear();for(const k of controls)held[k].clear();syncControls();
+ hero.vx=0;
+}
+function touchKey(target){
+ const el=target&&target.closest?target.closest('[data-control]'):null;
+ return el?el.dataset.control:null;
+}
+for(const k of controls){
+ const el=document.getElementById(k);
+ el.dataset.control=k;
+ el.style.touchAction='none';
+ el.addEventListener('contextmenu',e=>e.preventDefault());
+}
+// Global touch listeners still receive release events after fingers leave a button.
+document.addEventListener('touchstart',e=>{
+ let handled=false;
+ for(const t of e.changedTouches){
+  const key=touchKey(t.target);
+  if(!key)continue;
+  const id='t'+t.identifier;
+  releaseTouch(id);activeTouches.set(id,key);held[key].add(id);handled=true;
+ }
+ if(handled){e.preventDefault();syncControls();}
+},{passive:false});
+document.addEventListener('touchmove',e=>{
+ let handled=false;
+ for(const t of e.changedTouches){
+  const id='t'+t.identifier;
+  if(!activeTouches.has(id))continue;
+  handled=true;
+  // A finger moved away from its original button: release it immediately.
+  const origin=document.getElementById(activeTouches.get(id));
+  const r=origin.getBoundingClientRect();
+  if(t.clientX<r.left-12||t.clientX>r.right+12||t.clientY<r.top-12||t.clientY>r.bottom+12)releaseTouch(id);
+ }
+ if(handled)e.preventDefault();
+},{passive:false});
+for(const eventName of ['touchend','touchcancel'])document.addEventListener(eventName,e=>{
+ let handled=false;
+ for(const t of e.changedTouches){const id='t'+t.identifier;if(activeTouches.has(id)){releaseTouch(id);handled=true;}}
+ if(handled)e.preventDefault();
+},{passive:false});
+// Mouse support for desktop testing. Touch devices use the listeners above.
+for(const k of controls){
+ const el=document.getElementById(k);
+ el.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='touch')return;
+  e.preventDefault();held[k].add('mouse');syncControls();
+ });
+}
+for(const type of ['pointerup','pointercancel'])window.addEventListener(type,e=>{
+ if(e.pointerType==='touch')return;
+ for(const k of controls)held[k].delete('mouse');syncControls();
+});
+window.addEventListener('blur',clearControls);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)clearControls()});
+window.addEventListener('pagehide',clearControls);
+window.addEventListener('keydown',e=>{let k={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',' ':'jump',KeyZ:'jump',KeyX:'shoot'}[e.code];if(k){held[k].add('keyboard');syncControls();e.preventDefault()}});
+window.addEventListener('keyup',e=>{let k={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',' ':'jump',KeyZ:'jump',KeyX:'shoot'}[e.code];if(k){held[k].delete('keyboard');syncControls()}});
+function startGame(e){if(e)e.preventDefault();document.querySelector('#start').style.display='none';started=true;try{const AC=window.AudioContext||window.webkitAudioContext;if(AC){audio=new AC();const r=audio.resume();if(r&&r.catch)r.catch(()=>{});beep(660,.16)}}catch(err){audio=null;}}document.querySelector('#play').addEventListener('click',startGame,false);document.querySelector('#play').addEventListener('touchend',startGame,{passive:false});document.querySelector('#sound').onclick=()=>{muted=!muted;document.querySelector('#sound').textContent=muted?'🔇':'🔊'};c.addEventListener('pointerdown',()=>{if(won)reset()});reset();requestAnimationFrame(loop)})();
+</script><script>window.addEventListener("error",function(e){var n=document.getElementById("note");if(n)n.textContent="Tekniskt fel: "+e.message;});</script></body></html>
